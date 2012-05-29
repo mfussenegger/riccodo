@@ -3,11 +3,9 @@
 
 import os
 from markdown import Markdown
+from argh import command, ArghParser
 
 from jinja2 import Environment, FileSystemLoader
-
-PATH_CONTENT = '../site/content/'
-PATH_TEMPLATES = '../site/templates/'
 
 
 class MarkdownReader(object):
@@ -19,6 +17,11 @@ class MarkdownReader(object):
         'in_nav': lambda x: True if x == '1' or x == 'true' else False
     }
     extensions = ['codehilite', 'extra']
+
+    def __init__(self, path):
+        self.path = path
+        if self.path[-1] != '/':
+            self.path = self.path + '/'
 
     def process_metadata(self, name, value):
         if name in self.METADATA:
@@ -40,7 +43,7 @@ class MarkdownReader(object):
         for name, value in md.Meta.items():
             name = name.lower()
             metadata[name] = self.process_metadata(name, value[0])
-        return Page(''.join(filename.split('.')[:-1]),
+        return Page(filename.replace(self.path, ''),
                     content,
                     metadata.get('title'),
                     metadata.get('template'),
@@ -58,9 +61,9 @@ class Page(object):
                  parent_name,
                  sort,
                  in_nav):
-        self.path = path
-        self.url = get_url(self.path) + '.html'
-        self.name = os.path.basename(path)
+        self.path = path.replace('.md', '.html')
+        self.url = path.replace('.md', '.html')
+        self.name = os.path.basename(path.replace('.md', ''))
         self.title = title or self.name
         self.content = content
         self.template = template
@@ -75,12 +78,18 @@ class Page(object):
     def __str__(self):
         return '<Page {0}>'.format(self.name)
 
+    def descendants(self):
+        for p in self.children:
+            yield p
+            for c in p.descendants():
+                yield c
 
-def get_pages():
-    mdr = MarkdownReader()
+
+def get_pages(path):
+    mdr = MarkdownReader(path)
     pages = []
 
-    for root, dirs, files in os.walk(PATH_CONTENT):
+    for root, _, files in os.walk(path):
         for fi in files:
             path = os.path.join(root, fi)
             pages.append(mdr.read(path))
@@ -101,35 +110,32 @@ def build_page_tree(pages):
     return pages, pages_flat
 
 
-def get_url(path):
-    return '..{0}'.format(path.replace(PATH_CONTENT, ''))
-
-
-def in_path(page, children):
-    if page in children:
-        return True
-    for child in children:
-        if child.children:
-            return in_path(page, child.children)
-    return False
-
-
-def write_html(page_tree, pages_flat):
-    env = Environment(loader=FileSystemLoader(PATH_TEMPLATES))
-    env.globals['get_url'] = get_url
-    env.globals['in_path'] = in_path
+def write_html(page_tree, pages_flat, templates, output):
+    env = Environment(loader=FileSystemLoader(templates))
     for page in pages_flat:
         template = env.get_template(page.template)
+        page.url = os.path.abspath(os.path.join(output, page.url))
+        print(page.url)
         content = template.render({'page': page, 'pages': page_tree})
-        path = '.{0}.html'.format(page.path.replace(PATH_CONTENT, 'output'))
+        path = os.path.join(output, page.path)
+        if not os.path.exists(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
 
 
-def main():
-    pages = get_pages()
+@command
+def gen(content, templates, output):
+    pages = get_pages(content)
     page_tree, pages_flat = build_page_tree(pages)
-    write_html(page_tree, pages_flat)
+    write_html(page_tree, pages_flat, templates, output)
+
+
+def main():
+    p = ArghParser()
+    p.add_commands([gen])
+    p.dispatch()
+
 
 if __name__ == '__main__':
     main()
