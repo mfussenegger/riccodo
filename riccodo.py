@@ -2,10 +2,15 @@
 # -*- coding: utf-8 -*-
 
 import os
+import posixpath
 from markdown import Markdown
 from argh import command, ArghParser
+from urllib.parse import urlparse
 
 from jinja2 import Environment, FileSystemLoader
+
+
+URL = ''
 
 
 class MarkdownReader(object):
@@ -20,7 +25,7 @@ class MarkdownReader(object):
 
     def __init__(self, path):
         self.path = path
-        if self.path[-1] != '/':
+        if not self.path.endswith('/'):
             self.path = self.path + '/'
 
     def process_metadata(self, name, value):
@@ -62,7 +67,7 @@ class Page(object):
                  sort,
                  in_nav):
         self.path = path.replace('.md', '.html')
-        self.url = path.replace('.md', '.html')
+        self.url = '{0}/{1}'.format(URL, path.replace('.md', '.html'))
         self.name = os.path.basename(path.replace('.md', ''))
         self.title = title or self.name
         self.content = content
@@ -113,15 +118,26 @@ def build_page_tree(pages):
 def write_html(page_tree, pages_flat, templates, output):
     env = Environment(loader=FileSystemLoader(templates))
     for page in pages_flat:
+        env.globals['get_url'] = lambda x: get_url(page.url, x)
+
         template = env.get_template(page.template)
-        page.url = os.path.abspath(os.path.join(output, page.url))
-        print(page.url)
         content = template.render({'page': page, 'pages': page_tree})
+
         path = os.path.join(output, page.path)
         if not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path), exist_ok=True)
+
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
+
+
+def get_url(current, target):
+    current = urlparse(current).path
+    target = urlparse(target).path
+
+    result = posixpath.relpath(target, current).split('/')
+    result = '/'.join(result[1:])
+    return result
 
 
 @command
