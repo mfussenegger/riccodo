@@ -40,7 +40,11 @@ class MarkdownReader(object):
         :type filename: str.
         :returns: Page
         """
-        text = open(filename, 'r', encoding='utf-8').read()
+        try:
+            text = open(filename, 'r', encoding='utf-8').read()
+        except UnicodeDecodeError:
+            print('wrong encoding: {0}'.format(filename))
+            raise
         md = Markdown(extensions=set(self.extensions + ['meta']))
         content = md.convert(text)
 
@@ -71,9 +75,13 @@ class Page(object):
         self.name = os.path.basename(path.replace('.md', ''))
         self.title = title or self.name
         self.content = content
+        assert template is not None, 'Template is required: {0}'.format(path)
         self.template = template
         self.parent_name = parent_name
-        self.sort = sort or 1
+        if sort:
+            self.sort = int(sort)
+        else:
+            self.sort = 1
         self.children = []
         self.in_nav = 1 if in_nav == None else in_nav
 
@@ -97,7 +105,11 @@ def get_pages(path):
     for root, _, files in os.walk(path):
         for fi in files:
             path = os.path.join(root, fi)
-            pages.append(mdr.read(path))
+            try:
+                pages.append(mdr.read(path))
+            except AttributeError:
+                print('could not parse {0}'.format(path))
+                continue
 
     return pages
 
