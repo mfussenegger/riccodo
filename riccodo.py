@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import shutil
 import posixpath
 from markdown import Markdown
 from argh import command, ArghParser
@@ -152,8 +153,20 @@ def get_url(current, target):
     return result
 
 
+def copy_static(source, target):
+    source = os.path.join(source, 'static')
+    target = os.path.join(target, 'static')
+
+    if os.path.exists(target):
+        shutil.rmtree(target)
+
+    if os.path.exists(source):
+        shutil.copytree(source, target)
+
+
 @command
 def gen(content, templates, output):
+    copy_static(templates, output)
     pages = get_pages(content)
     page_tree, pages_flat = build_page_tree(pages)
     write_html(page_tree, pages_flat, templates, output)
