@@ -7,11 +7,21 @@ import posixpath
 from markdown import Markdown
 from argh import command, ArghParser
 from urllib.parse import urlparse
+import pyinotify
 
 from jinja2 import Environment, FileSystemLoader
 
 
 URL = ''
+
+
+class EventHandler(pyinotify.ProcessEvent):
+    def set_callback(self, callback):
+        self.callback = callback
+
+    def process_IN_CREATE(self, event):
+        print('Creating: {0}'.format(event.pathname))
+        self.callback()
 
 
 class MarkdownReader(object):
@@ -166,15 +176,29 @@ def copy_static(source, target):
 
 @command
 def gen(content, templates, output):
+    print('Generating content...')
     copy_static(templates, output)
     pages = get_pages(content)
     page_tree, pages_flat = build_page_tree(pages)
     write_html(page_tree, pages_flat, templates, output)
+    print('Done.')
+
+
+@command
+def watch(content, templates, output):
+    mask = pyinotify.IN_CREATE
+    wm = pyinotify.WatchManager()
+    handler = EventHandler()
+    handler.set_callback(lambda: gen(content, templates, output))
+    notifier = pyinotify.Notifier(wm, handler)
+    wm.add_watch(content, mask, rec=True)
+    wm.add_watch(templates, mask, rec=True)
+    notifier.loop()
 
 
 def main():
     p = ArghParser()
-    p.add_commands([gen])
+    p.add_commands([gen, watch])
     p.dispatch()
 
 
