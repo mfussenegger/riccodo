@@ -29,6 +29,7 @@ class MarkdownReader(object):
         'template': lambda x: str(x).strip(),
         'sort:': lambda x: str(x).strip(),
         'title': lambda x: str(x).strip(),
+        'title_short': lambda x: str(x).strip(),
         'parent:': lambda x: str(x).strip(),
         'in_nav': lambda x: True if x == '1' or x == 'true' else False
     }
@@ -66,6 +67,7 @@ class MarkdownReader(object):
         return Page(filename.replace(self.path, ''),
                     content,
                     metadata.get('title'),
+                    metadata.get('title_short'),
                     metadata.get('template'),
                     metadata.get('parent'),
                     metadata.get('sort'),
@@ -77,14 +79,16 @@ class Page(object):
                  path,
                  content,
                  title,
+                 title_short,
                  template,
                  parent_name,
                  sort,
                  in_nav):
         self.path = path.replace('.md', '.html')
-        self.url = '{0}/{1}'.format(URL, path.replace('.md', '.html'))
+        self.url = '{0}/{1}'.format(URL, self.path)
         self.name = os.path.basename(path.replace('.md', ''))
         self.title = title or self.name
+        self.title_short = title_short or title
         self.content = content
         assert template is not None, 'Template is required: {0}'.format(path)
         self.template = template
@@ -167,17 +171,20 @@ def copy_static(source, target):
     source = os.path.join(source, 'static')
     target = os.path.join(target, 'static')
 
-    if os.path.exists(target):
+    try:
         shutil.rmtree(target)
+    except OSError:
+        pass
 
     if os.path.exists(source):
         shutil.copytree(source, target)
 
 
 @command
-def gen(content, templates, output):
+def gen(content, templates, output, nostatic=False):
     print('Generating content...')
-    copy_static(templates, output)
+    if not nostatic:
+        copy_static(templates, output)
     pages = get_pages(content)
     page_tree, pages_flat = build_page_tree(pages)
     write_html(page_tree, pages_flat, templates, output)
@@ -185,11 +192,11 @@ def gen(content, templates, output):
 
 
 @command
-def watch(content, templates, output):
+def watch(content, templates, output, nostatic=False):
     mask = pyinotify.IN_CREATE
     wm = pyinotify.WatchManager()
     handler = EventHandler()
-    handler.set_callback(lambda: gen(content, templates, output))
+    handler.set_callback(lambda: gen(content, templates, output, nostatic))
     notifier = pyinotify.Notifier(wm, handler)
     wm.add_watch(content, mask, rec=True)
     wm.add_watch(templates, mask, rec=True)
