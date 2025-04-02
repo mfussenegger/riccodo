@@ -4,24 +4,14 @@
 import os
 import shutil
 import posixpath
+import argparse
 from markdown import Markdown
-from argh import command, ArghParser
 from urllib.parse import urlparse
-import pyinotify
 
 from jinja2 import Environment, FileSystemLoader
 
 
 URL = ''
-
-
-class EventHandler(pyinotify.ProcessEvent):
-    def set_callback(self, callback):
-        self.callback = callback
-
-    def process_IN_CREATE(self, event):
-        print('Creating: {0}'.format(event.pathname))
-        self.callback()
 
 
 class MarkdownReader(object):
@@ -180,7 +170,6 @@ def copy_static(source, target):
         shutil.copytree(source, target)
 
 
-@command
 def gen(content, templates, output, nostatic=False):
     print('Generating content...')
     if not nostatic:
@@ -191,22 +180,14 @@ def gen(content, templates, output, nostatic=False):
     print('Done.')
 
 
-@command
-def watch(content, templates, output, nostatic=False):
-    mask = pyinotify.IN_CREATE
-    wm = pyinotify.WatchManager()
-    handler = EventHandler()
-    handler.set_callback(lambda: gen(content, templates, output, nostatic))
-    notifier = pyinotify.Notifier(wm, handler)
-    wm.add_watch(content, mask, rec=True)
-    wm.add_watch(templates, mask, rec=True)
-    notifier.loop()
-
-
 def main():
-    p = ArghParser()
-    p.add_commands([gen, watch])
-    p.dispatch()
+    parser = argparse.ArgumentParser("riccodo")
+    parser.add_argument("--content", type=str, required=True)
+    parser.add_argument("--templates", type=str, required=True)
+    parser.add_argument("--output", type=str, required=True)
+    parser.add_argument("--no-static", action="store_true")
+    args = parser.parse_args()
+    gen(args.content, args.templates, args.output, args.no_static)
 
 
 if __name__ == '__main__':
